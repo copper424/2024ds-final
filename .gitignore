@@ -1,0 +1,32 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Build directories
+/bin/
+/obj/
+/test/
+
+# Vendor directory
+/vendor/
+
+# Editor auxiliary files
+*~
+*.swp
+*.swo
+*.tmp
+.DS_Store
+
+# Logs
+*.log
+
+# Coverage files
+coverage.out
+
+# IDE settings
+.vscode/
+.idea/

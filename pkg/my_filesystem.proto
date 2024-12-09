@@ -1,0 +1,192 @@
+syntax = "proto3";
+
+package my_rpc;
+
+option go_package = "github/com/copper424/ds-final/my_rpc";
+
+// File metadata information
+message FileMetadata {
+  string filename = 1;
+  string path = 2;
+  int64 size = 3;
+  uint32 permission = 4;  // Unix-style permission
+  string owner = 5;
+  int64 creation_time = 6;
+  int64 modification_time = 7;
+  repeated DatanodeLocation replicas = 8;  // List of datanodes containing replicas
+}
+
+// Location information for a datanode
+message DatanodeLocation {
+  string datanode_id = 1;
+  string host = 2;
+  int32 port = 3;
+}
+
+// File content with metadata
+message FileData {
+  string path = 1;
+  bytes content = 2;
+}
+
+// Request to create a new file
+message CreateFileRequest {
+  string path = 1;
+  uint32 permission = 2;
+  int32 replication_factor = 3;  // Number of replicas to maintain
+  bytes content = 4;
+}
+
+// Response for file creation
+message CreateFileResponse {
+  bool success = 1;
+  string error_message = 2;
+  FileMetadata metadata = 3;
+}
+
+// Request to read a file
+message ReadFileRequest {
+  string path = 1;
+}
+
+// Response for file reading
+message ReadFileResponse {
+  bool success = 1;
+  string error_message = 2;
+  bytes content = 3;
+  FileMetadata metadata = 4;
+}
+
+// Request to write/update a file
+message WriteFileRequest {
+  string path = 1;
+  bytes content = 2;
+}
+
+// Response for file writing
+message WriteFileResponse {
+  bool success = 1;
+  string error_message = 2;
+  int64 bytes_written = 3;
+}
+
+// Request to delete a file
+message DeleteFileRequest {
+  string path = 1;
+}
+
+// Response for file deletion
+message DeleteFileResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+// Request to list directory contents
+message ListDirectoryRequest {
+  string path = 1;
+}
+
+// Response for directory listing
+message ListDirectoryResponse {
+  bool success = 1;
+  string error_message = 2;
+  repeated FileMetadata files = 3;
+}
+
+// Request to get file metadata
+message GetFileMetadataRequest {
+  string path = 1;
+}
+
+// Response for file metadata
+message GetFileMetadataResponse {
+  bool success = 1;
+  string error_message = 2;
+  FileMetadata metadata = 3;
+}
+
+message PrepareRequest {
+    string transaction_id = 1;
+    string path = 2;
+    bytes content = 3;
+}
+
+message PrepareResponse {
+    bool success = 1;
+    string error_message = 2;
+}
+
+message CommitRequest {
+    string transaction_id = 1;
+    string path = 2;
+}
+
+message CommitResponse {
+    bool success = 1;
+    string error_message = 2;
+}
+
+message AbortRequest {
+    string transaction_id = 1;
+    string path = 2;
+}
+
+message AbortResponse {
+    bool success = 1;
+    string error_message = 2;
+}
+
+
+// NameNode service definition
+service NameNodeService {
+    // Metadata operations
+    rpc GetFileMetadata(GetFileMetadataRequest) returns (GetFileMetadataResponse) {}
+    rpc ListDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {}
+    
+    // File location operations
+    rpc GetFileLocations(GetFileMetadataRequest) returns (GetFileMetadataResponse) {}
+    
+    // Coordination operations
+    rpc RegisterDataNode(DatanodeLocation) returns (RegisterResponse) {}
+    rpc ReportFileStatus(FileMetadata) returns (StatusResponse) {}
+  }
+  
+  // DataNode service definition
+  service DataNodeService {
+    // Data operations
+    rpc StoreFile(FileData) returns (StatusResponse) {}
+    rpc RetrieveFile(ReadFileRequest) returns (ReadFileResponse) {}
+    rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {}
+    rpc ReplicateFile(FileData) returns (StatusResponse) {}
+    // 2PC methods
+    rpc Prepare(PrepareRequest) returns (PrepareResponse) {}
+    rpc Commit(CommitRequest) returns (CommitResponse) {}
+    rpc Abort(AbortRequest) returns (AbortResponse) {}
+  }
+  
+  // Client service definition
+  service ClientService {
+    // File operations
+    rpc CreateFile(CreateFileRequest) returns (CreateFileResponse) {}
+    rpc ReadFile(ReadFileRequest) returns (ReadFileResponse) {}
+    rpc WriteFile(WriteFileRequest) returns (WriteFileResponse) {}
+    rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {}
+    
+    // Directory operations
+    rpc ListDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {}
+    
+    // Metadata operations
+    rpc GetFileMetadata(GetFileMetadataRequest) returns (GetFileMetadataResponse) {}
+  }
+  
+  // Additional messages for coordination
+  message RegisterResponse {
+    bool success = 1;
+    string error_message = 2;
+    string datanode_id = 3;
+  }
+  
+  message StatusResponse {
+    bool success = 1;
+    string error_message = 2;
+  }
