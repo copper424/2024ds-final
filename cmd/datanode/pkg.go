@@ -180,7 +180,7 @@ func (s *DataNodeServer) RetrieveFile(ctx context.Context, req *pb.ReadFileReque
 		Content: content,
 		Metadata: &pb.FileMetadata{
 			Path: req.Path,
-			Size: int64(len(content)),
+			Size: uint64(len(content)),
 			// Other metadata fields would be filled by the NameNode
 		},
 	}, nil

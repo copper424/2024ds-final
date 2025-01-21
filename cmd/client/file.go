@@ -61,7 +61,7 @@ func (sh *DFSShell) uploadFile(args []string) {
 	if metaResp.Success {
 		// File exists, use ReportFileStatus to update metadata
 		newMetadata = metaResp.Metadata
-		newMetadata.Size = int64(len(content))
+		newMetadata.Size = uint64(len(content))
 		newMetadata.ModificationTime = time.Now().UnixNano()
 		newMetadata.Version += 1
 
@@ -75,6 +75,9 @@ func (sh *DFSShell) uploadFile(args []string) {
 		createResp, err := sh.client.CreateFile(ctx, &pb.CreateFileRequest{
 			Path:              dfsPath,
 			ReplicationFactor: 3,
+			Permission:        0644,
+			Owner:             "copper424",
+			Size:              uint64(len(content)),
 		})
 		if err != nil || !createResp.Success {
 			fmt.Printf("Failed to create file: %v\n", err)
@@ -338,4 +341,27 @@ func (sh *DFSShell) catFile(args []string) {
 	}
 
 	fmt.Print(string(content))
+}
+
+func (sh *DFSShell) moveFile(args []string) {
+	if len(args) != 3 {
+		fmt.Println("Usage: mv <src> <dest>")
+		return
+	}
+
+	srcPath := sh.resolvePath(args[1])
+	destPath := sh.resolvePath(args[2])
+
+	resp, err := sh.client.MoveFile(context.Background(), &pb.ReadFileRequest{})
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	if !resp.Success {
+		fmt.Printf("Failed to move file: %s\n", resp.ErrorMessage)
+		return
+	}
+
+	fmt.Printf("File moved from %s to %s successfully\n", srcPath, destPath)
 }

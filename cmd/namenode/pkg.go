@@ -71,9 +71,9 @@ func (s *NameNodeServer) CreateFile(ctx context.Context, req *pb.CreateFileReque
 	metadata := &pb.FileMetadata{
 		Filename:         filepath.Base(path),
 		Path:             path,
-		Size:             int64(len(req.Content)),
-		Permission:       req.Permission,
-		Owner:            "copper424", // Current user
+		Size:             req.GetSize(),
+		Permission:       req.GetPermission(),
+		Owner:            req.GetOwner(), // Current user
 		CreationTime:     time.Now().UnixNano(),
 		ModificationTime: time.Now().UnixNano(),
 		Version:          0,

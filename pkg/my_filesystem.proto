@@ -8,7 +8,7 @@ option go_package = "github/com/copper424/ds-final/my_rpc";
 message FileMetadata {
   string filename = 1;
   string path = 2;
-  int64 size = 3;
+  uint64 size = 3;
   uint32 permission = 4;  // Unix-style permission
   string owner = 5;
   int64 creation_time = 6;
@@ -35,7 +35,9 @@ message CreateFileRequest {
   string path = 1;
   uint32 permission = 2;
   int32 replication_factor = 3;  // Number of replicas to maintain
-  bytes content = 4;
+  uint64 size = 4;
+  string owner = 5;
+  // bytes content = 4;
 }
 
 // Response for file creation
@@ -252,4 +254,16 @@ service NameNodeService {
   message StatusResponse {
     bool success = 1;
     string error_message = 2;
+  }
+
+  // SecondaryNameNode service definition
+  service SecondaryNameNodeService {
+    rpc ReceiveMetadata(MetadataPayload) returns (StatusResponse) {}
+    rpc RestoreMetadata(Empty) returns (MetadataPayload) {}
+  }
+  // Empty message
+  message Empty {}
+  // Metadata payload
+  message MetadataPayload {
+    bytes data = 1;
   }

@@ -5,9 +5,11 @@ cd bin/
 pids=()
 # pids+=($BASHPID) # $BASHPID 获取当前进程的 PID
 # # 启动命令并放入后台
-./namenode &
+./namenode --secondary_namenode localhost:20242 --restoreFile ./secondary_backup.json &
 pids+=("$!") # $! 获取最后一个后台进程的 PID
-./datanode --port 20251 --dataDir datadir1 &
+./secondary_namenode &
+pids+=("$!")
+./datanode --port 20251 --dataDir datadir1 &                                                                                                                  
 pids+=("$!")
 ./datanode --port 20252 --dataDir datadir2 &
 pids+=("$!")

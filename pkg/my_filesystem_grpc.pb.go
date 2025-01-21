@@ -851,3 +851,148 @@ var DataNodeService_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "pkg/my_filesystem.proto",
 }
+
+const (
+	SecondaryNameNodeService_ReceiveMetadata_FullMethodName = "/my_rpc.SecondaryNameNodeService/ReceiveMetadata"
+	SecondaryNameNodeService_RestoreMetadata_FullMethodName = "/my_rpc.SecondaryNameNodeService/RestoreMetadata"
+)
+
+// SecondaryNameNodeServiceClient is the client API for SecondaryNameNodeService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// SecondaryNameNode service definition
+type SecondaryNameNodeServiceClient interface {
+	ReceiveMetadata(ctx context.Context, in *MetadataPayload, opts ...grpc.CallOption) (*StatusResponse, error)
+	RestoreMetadata(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*MetadataPayload, error)
+}
+
+type secondaryNameNodeServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewSecondaryNameNodeServiceClient(cc grpc.ClientConnInterface) SecondaryNameNodeServiceClient {
+	return &secondaryNameNodeServiceClient{cc}
+}
+
+func (c *secondaryNameNodeServiceClient) ReceiveMetadata(ctx context.Context, in *MetadataPayload, opts ...grpc.CallOption) (*StatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StatusResponse)
+	err := c.cc.Invoke(ctx, SecondaryNameNodeService_ReceiveMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *secondaryNameNodeServiceClient) RestoreMetadata(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*MetadataPayload, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MetadataPayload)
+	err := c.cc.Invoke(ctx, SecondaryNameNodeService_RestoreMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SecondaryNameNodeServiceServer is the server API for SecondaryNameNodeService service.
+// All implementations must embed UnimplementedSecondaryNameNodeServiceServer
+// for forward compatibility.
+//
+// SecondaryNameNode service definition
+type SecondaryNameNodeServiceServer interface {
+	ReceiveMetadata(context.Context, *MetadataPayload) (*StatusResponse, error)
+	RestoreMetadata(context.Context, *Empty) (*MetadataPayload, error)
+	mustEmbedUnimplementedSecondaryNameNodeServiceServer()
+}
+
+// UnimplementedSecondaryNameNodeServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedSecondaryNameNodeServiceServer struct{}
+
+func (UnimplementedSecondaryNameNodeServiceServer) ReceiveMetadata(context.Context, *MetadataPayload) (*StatusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReceiveMetadata not implemented")
+}
+func (UnimplementedSecondaryNameNodeServiceServer) RestoreMetadata(context.Context, *Empty) (*MetadataPayload, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RestoreMetadata not implemented")
+}
+func (UnimplementedSecondaryNameNodeServiceServer) mustEmbedUnimplementedSecondaryNameNodeServiceServer() {
+}
+func (UnimplementedSecondaryNameNodeServiceServer) testEmbeddedByValue() {}
+
+// UnsafeSecondaryNameNodeServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SecondaryNameNodeServiceServer will
+// result in compilation errors.
+type UnsafeSecondaryNameNodeServiceServer interface {
+	mustEmbedUnimplementedSecondaryNameNodeServiceServer()
+}
+
+func RegisterSecondaryNameNodeServiceServer(s grpc.ServiceRegistrar, srv SecondaryNameNodeServiceServer) {
+	// If the following call pancis, it indicates UnimplementedSecondaryNameNodeServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&SecondaryNameNodeService_ServiceDesc, srv)
+}
+
+func _SecondaryNameNodeService_ReceiveMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MetadataPayload)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SecondaryNameNodeServiceServer).ReceiveMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SecondaryNameNodeService_ReceiveMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SecondaryNameNodeServiceServer).ReceiveMetadata(ctx, req.(*MetadataPayload))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SecondaryNameNodeService_RestoreMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SecondaryNameNodeServiceServer).RestoreMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SecondaryNameNodeService_RestoreMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SecondaryNameNodeServiceServer).RestoreMetadata(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// SecondaryNameNodeService_ServiceDesc is the grpc.ServiceDesc for SecondaryNameNodeService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var SecondaryNameNodeService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "my_rpc.SecondaryNameNodeService",
+	HandlerType: (*SecondaryNameNodeServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ReceiveMetadata",
+			Handler:    _SecondaryNameNodeService_ReceiveMetadata_Handler,
+		},
+		{
+			MethodName: "RestoreMetadata",
+			Handler:    _SecondaryNameNodeService_RestoreMetadata_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "pkg/my_filesystem.proto",
+}
