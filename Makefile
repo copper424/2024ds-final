@@ -22,5 +22,6 @@ rpc:
 	protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative ./pkg/my_filesystem.proto
 
 clean:
+	rm -r $(BIN_DIR)/datadir*
 	rm -f $(BIN_DIR)/*
-	rm -f pkg/*.pb.go 
+	# rm -f pkg/*.pb.go 
