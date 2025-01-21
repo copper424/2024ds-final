@@ -19,19 +19,18 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	NameNodeService_GetFileMetadata_FullMethodName    = "/my_rpc.NameNodeService/GetFileMetadata"
-	NameNodeService_UpdateFileMetadata_FullMethodName = "/my_rpc.NameNodeService/UpdateFileMetadata"
-	NameNodeService_LockFile_FullMethodName           = "/my_rpc.NameNodeService/LockFile"
-	NameNodeService_UnlockFile_FullMethodName         = "/my_rpc.NameNodeService/UnlockFile"
-	NameNodeService_GetFileLocations_FullMethodName   = "/my_rpc.NameNodeService/GetFileLocations"
-	NameNodeService_RegisterDataNode_FullMethodName   = "/my_rpc.NameNodeService/RegisterDataNode"
-	NameNodeService_ReportFileStatus_FullMethodName   = "/my_rpc.NameNodeService/ReportFileStatus"
-	NameNodeService_CreateFile_FullMethodName         = "/my_rpc.NameNodeService/CreateFile"
-	NameNodeService_MoveFile_FullMethodName           = "/my_rpc.NameNodeService/MoveFile"
-	NameNodeService_DeleteFile_FullMethodName         = "/my_rpc.NameNodeService/DeleteFile"
-	NameNodeService_ListDirectory_FullMethodName      = "/my_rpc.NameNodeService/ListDirectory"
-	NameNodeService_MakeDirectory_FullMethodName      = "/my_rpc.NameNodeService/MakeDirectory"
-	NameNodeService_RemoveDirectory_FullMethodName    = "/my_rpc.NameNodeService/RemoveDirectory"
+	NameNodeService_GetFileMetadata_FullMethodName  = "/my_rpc.NameNodeService/GetFileMetadata"
+	NameNodeService_LockFile_FullMethodName         = "/my_rpc.NameNodeService/LockFile"
+	NameNodeService_UnlockFile_FullMethodName       = "/my_rpc.NameNodeService/UnlockFile"
+	NameNodeService_GetFileLocations_FullMethodName = "/my_rpc.NameNodeService/GetFileLocations"
+	NameNodeService_RegisterDataNode_FullMethodName = "/my_rpc.NameNodeService/RegisterDataNode"
+	NameNodeService_ReportFileStatus_FullMethodName = "/my_rpc.NameNodeService/ReportFileStatus"
+	NameNodeService_CreateFile_FullMethodName       = "/my_rpc.NameNodeService/CreateFile"
+	NameNodeService_MoveFile_FullMethodName         = "/my_rpc.NameNodeService/MoveFile"
+	NameNodeService_DeleteFile_FullMethodName       = "/my_rpc.NameNodeService/DeleteFile"
+	NameNodeService_ListDirectory_FullMethodName    = "/my_rpc.NameNodeService/ListDirectory"
+	NameNodeService_MakeDirectory_FullMethodName    = "/my_rpc.NameNodeService/MakeDirectory"
+	NameNodeService_RemoveDirectory_FullMethodName  = "/my_rpc.NameNodeService/RemoveDirectory"
 )
 
 // NameNodeServiceClient is the client API for NameNodeService service.
@@ -42,7 +41,6 @@ const (
 type NameNodeServiceClient interface {
 	// Metadata operations
 	GetFileMetadata(ctx context.Context, in *GetFileMetadataRequest, opts ...grpc.CallOption) (*GetFileMetadataResponse, error)
-	UpdateFileMetadata(ctx context.Context, in *FileMetadata, opts ...grpc.CallOption) (*StatusResponse, error)
 	LockFile(ctx context.Context, in *LockFileRequest, opts ...grpc.CallOption) (*LockFileResponse, error)
 	UnlockFile(ctx context.Context, in *UnlockFileRequest, opts ...grpc.CallOption) (*UnlockFileResponse, error)
 	// File location operations
@@ -72,16 +70,6 @@ func (c *nameNodeServiceClient) GetFileMetadata(ctx context.Context, in *GetFile
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetFileMetadataResponse)
 	err := c.cc.Invoke(ctx, NameNodeService_GetFileMetadata_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *nameNodeServiceClient) UpdateFileMetadata(ctx context.Context, in *FileMetadata, opts ...grpc.CallOption) (*StatusResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(StatusResponse)
-	err := c.cc.Invoke(ctx, NameNodeService_UpdateFileMetadata_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +194,6 @@ func (c *nameNodeServiceClient) RemoveDirectory(ctx context.Context, in *ListDir
 type NameNodeServiceServer interface {
 	// Metadata operations
 	GetFileMetadata(context.Context, *GetFileMetadataRequest) (*GetFileMetadataResponse, error)
-	UpdateFileMetadata(context.Context, *FileMetadata) (*StatusResponse, error)
 	LockFile(context.Context, *LockFileRequest) (*LockFileResponse, error)
 	UnlockFile(context.Context, *UnlockFileRequest) (*UnlockFileResponse, error)
 	// File location operations
@@ -234,9 +221,6 @@ type UnimplementedNameNodeServiceServer struct{}
 
 func (UnimplementedNameNodeServiceServer) GetFileMetadata(context.Context, *GetFileMetadataRequest) (*GetFileMetadataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetFileMetadata not implemented")
-}
-func (UnimplementedNameNodeServiceServer) UpdateFileMetadata(context.Context, *FileMetadata) (*StatusResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdateFileMetadata not implemented")
 }
 func (UnimplementedNameNodeServiceServer) LockFile(context.Context, *LockFileRequest) (*LockFileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LockFile not implemented")
@@ -306,24 +290,6 @@ func _NameNodeService_GetFileMetadata_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NameNodeServiceServer).GetFileMetadata(ctx, req.(*GetFileMetadataRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _NameNodeService_UpdateFileMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(FileMetadata)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(NameNodeServiceServer).UpdateFileMetadata(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: NameNodeService_UpdateFileMetadata_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(NameNodeServiceServer).UpdateFileMetadata(ctx, req.(*FileMetadata))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -538,10 +504,6 @@ var NameNodeService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NameNodeService_GetFileMetadata_Handler,
 		},
 		{
-			MethodName: "UpdateFileMetadata",
-			Handler:    _NameNodeService_UpdateFileMetadata_Handler,
-		},
-		{
 			MethodName: "LockFile",
 			Handler:    _NameNodeService_LockFile_Handler,
 		},
@@ -591,12 +553,12 @@ var NameNodeService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	DataNodeService_StoreFile_FullMethodName    = "/my_rpc.DataNodeService/StoreFile"
-	DataNodeService_RetrieveFile_FullMethodName = "/my_rpc.DataNodeService/RetrieveFile"
-	DataNodeService_DeleteFile_FullMethodName   = "/my_rpc.DataNodeService/DeleteFile"
-	DataNodeService_Prepare_FullMethodName      = "/my_rpc.DataNodeService/Prepare"
-	DataNodeService_Commit_FullMethodName       = "/my_rpc.DataNodeService/Commit"
-	DataNodeService_Abort_FullMethodName        = "/my_rpc.DataNodeService/Abort"
+	DataNodeService_StoreFile_FullMethodName      = "/my_rpc.DataNodeService/StoreFile"
+	DataNodeService_RetrieveFile_FullMethodName   = "/my_rpc.DataNodeService/RetrieveFile"
+	DataNodeService_DeleteFile_FullMethodName     = "/my_rpc.DataNodeService/DeleteFile"
+	DataNodeService_PrepareReplica_FullMethodName = "/my_rpc.DataNodeService/PrepareReplica"
+	DataNodeService_CommitReplica_FullMethodName  = "/my_rpc.DataNodeService/CommitReplica"
+	DataNodeService_AbortReplica_FullMethodName   = "/my_rpc.DataNodeService/AbortReplica"
 )
 
 // DataNodeServiceClient is the client API for DataNodeService service.
@@ -605,15 +567,14 @@ const (
 //
 // DataNode service definition
 type DataNodeServiceClient interface {
-	// Data operations
+	// Existing methods
 	StoreFile(ctx context.Context, in *WriteFileRequest, opts ...grpc.CallOption) (*WriteFileResponse, error)
 	RetrieveFile(ctx context.Context, in *ReadFileRequest, opts ...grpc.CallOption) (*ReadFileResponse, error)
 	DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileResponse, error)
-	// rpc ReplicateFile(FileData) returns (StatusResponse) {}
-	// 2PC methods
-	Prepare(ctx context.Context, in *PrepareRequest, opts ...grpc.CallOption) (*PrepareResponse, error)
-	Commit(ctx context.Context, in *CommitRequest, opts ...grpc.CallOption) (*CommitResponse, error)
-	Abort(ctx context.Context, in *AbortRequest, opts ...grpc.CallOption) (*AbortResponse, error)
+	// New 2PC methods
+	PrepareReplica(ctx context.Context, in *PrepareReplicaRequest, opts ...grpc.CallOption) (*PrepareReplicaResponse, error)
+	CommitReplica(ctx context.Context, in *CommitReplicaRequest, opts ...grpc.CallOption) (*CommitReplicaResponse, error)
+	AbortReplica(ctx context.Context, in *AbortReplicaRequest, opts ...grpc.CallOption) (*AbortReplicaResponse, error)
 }
 
 type dataNodeServiceClient struct {
@@ -654,30 +615,30 @@ func (c *dataNodeServiceClient) DeleteFile(ctx context.Context, in *DeleteFileRe
 	return out, nil
 }
 
-func (c *dataNodeServiceClient) Prepare(ctx context.Context, in *PrepareRequest, opts ...grpc.CallOption) (*PrepareResponse, error) {
+func (c *dataNodeServiceClient) PrepareReplica(ctx context.Context, in *PrepareReplicaRequest, opts ...grpc.CallOption) (*PrepareReplicaResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(PrepareResponse)
-	err := c.cc.Invoke(ctx, DataNodeService_Prepare_FullMethodName, in, out, cOpts...)
+	out := new(PrepareReplicaResponse)
+	err := c.cc.Invoke(ctx, DataNodeService_PrepareReplica_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *dataNodeServiceClient) Commit(ctx context.Context, in *CommitRequest, opts ...grpc.CallOption) (*CommitResponse, error) {
+func (c *dataNodeServiceClient) CommitReplica(ctx context.Context, in *CommitReplicaRequest, opts ...grpc.CallOption) (*CommitReplicaResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(CommitResponse)
-	err := c.cc.Invoke(ctx, DataNodeService_Commit_FullMethodName, in, out, cOpts...)
+	out := new(CommitReplicaResponse)
+	err := c.cc.Invoke(ctx, DataNodeService_CommitReplica_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *dataNodeServiceClient) Abort(ctx context.Context, in *AbortRequest, opts ...grpc.CallOption) (*AbortResponse, error) {
+func (c *dataNodeServiceClient) AbortReplica(ctx context.Context, in *AbortReplicaRequest, opts ...grpc.CallOption) (*AbortReplicaResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AbortResponse)
-	err := c.cc.Invoke(ctx, DataNodeService_Abort_FullMethodName, in, out, cOpts...)
+	out := new(AbortReplicaResponse)
+	err := c.cc.Invoke(ctx, DataNodeService_AbortReplica_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -690,15 +651,14 @@ func (c *dataNodeServiceClient) Abort(ctx context.Context, in *AbortRequest, opt
 //
 // DataNode service definition
 type DataNodeServiceServer interface {
-	// Data operations
+	// Existing methods
 	StoreFile(context.Context, *WriteFileRequest) (*WriteFileResponse, error)
 	RetrieveFile(context.Context, *ReadFileRequest) (*ReadFileResponse, error)
 	DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error)
-	// rpc ReplicateFile(FileData) returns (StatusResponse) {}
-	// 2PC methods
-	Prepare(context.Context, *PrepareRequest) (*PrepareResponse, error)
-	Commit(context.Context, *CommitRequest) (*CommitResponse, error)
-	Abort(context.Context, *AbortRequest) (*AbortResponse, error)
+	// New 2PC methods
+	PrepareReplica(context.Context, *PrepareReplicaRequest) (*PrepareReplicaResponse, error)
+	CommitReplica(context.Context, *CommitReplicaRequest) (*CommitReplicaResponse, error)
+	AbortReplica(context.Context, *AbortReplicaRequest) (*AbortReplicaResponse, error)
 	mustEmbedUnimplementedDataNodeServiceServer()
 }
 
@@ -718,14 +678,14 @@ func (UnimplementedDataNodeServiceServer) RetrieveFile(context.Context, *ReadFil
 func (UnimplementedDataNodeServiceServer) DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteFile not implemented")
 }
-func (UnimplementedDataNodeServiceServer) Prepare(context.Context, *PrepareRequest) (*PrepareResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Prepare not implemented")
+func (UnimplementedDataNodeServiceServer) PrepareReplica(context.Context, *PrepareReplicaRequest) (*PrepareReplicaResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PrepareReplica not implemented")
 }
-func (UnimplementedDataNodeServiceServer) Commit(context.Context, *CommitRequest) (*CommitResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Commit not implemented")
+func (UnimplementedDataNodeServiceServer) CommitReplica(context.Context, *CommitReplicaRequest) (*CommitReplicaResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CommitReplica not implemented")
 }
-func (UnimplementedDataNodeServiceServer) Abort(context.Context, *AbortRequest) (*AbortResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Abort not implemented")
+func (UnimplementedDataNodeServiceServer) AbortReplica(context.Context, *AbortReplicaRequest) (*AbortReplicaResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AbortReplica not implemented")
 }
 func (UnimplementedDataNodeServiceServer) mustEmbedUnimplementedDataNodeServiceServer() {}
 func (UnimplementedDataNodeServiceServer) testEmbeddedByValue()                         {}
@@ -802,56 +762,56 @@ func _DataNodeService_DeleteFile_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DataNodeService_Prepare_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PrepareRequest)
+func _DataNodeService_PrepareReplica_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PrepareReplicaRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DataNodeServiceServer).Prepare(ctx, in)
+		return srv.(DataNodeServiceServer).PrepareReplica(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DataNodeService_Prepare_FullMethodName,
+		FullMethod: DataNodeService_PrepareReplica_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DataNodeServiceServer).Prepare(ctx, req.(*PrepareRequest))
+		return srv.(DataNodeServiceServer).PrepareReplica(ctx, req.(*PrepareReplicaRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DataNodeService_Commit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CommitRequest)
+func _DataNodeService_CommitReplica_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CommitReplicaRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DataNodeServiceServer).Commit(ctx, in)
+		return srv.(DataNodeServiceServer).CommitReplica(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DataNodeService_Commit_FullMethodName,
+		FullMethod: DataNodeService_CommitReplica_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DataNodeServiceServer).Commit(ctx, req.(*CommitRequest))
+		return srv.(DataNodeServiceServer).CommitReplica(ctx, req.(*CommitReplicaRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DataNodeService_Abort_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AbortRequest)
+func _DataNodeService_AbortReplica_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AbortReplicaRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DataNodeServiceServer).Abort(ctx, in)
+		return srv.(DataNodeServiceServer).AbortReplica(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DataNodeService_Abort_FullMethodName,
+		FullMethod: DataNodeService_AbortReplica_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DataNodeServiceServer).Abort(ctx, req.(*AbortRequest))
+		return srv.(DataNodeServiceServer).AbortReplica(ctx, req.(*AbortReplicaRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -876,16 +836,16 @@ var DataNodeService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _DataNodeService_DeleteFile_Handler,
 		},
 		{
-			MethodName: "Prepare",
-			Handler:    _DataNodeService_Prepare_Handler,
+			MethodName: "PrepareReplica",
+			Handler:    _DataNodeService_PrepareReplica_Handler,
 		},
 		{
-			MethodName: "Commit",
-			Handler:    _DataNodeService_Commit_Handler,
+			MethodName: "CommitReplica",
+			Handler:    _DataNodeService_CommitReplica_Handler,
 		},
 		{
-			MethodName: "Abort",
-			Handler:    _DataNodeService_Abort_Handler,
+			MethodName: "AbortReplica",
+			Handler:    _DataNodeService_AbortReplica_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -13,7 +13,8 @@ message FileMetadata {
   string owner = 5;
   int64 creation_time = 6;
   int64 modification_time = 7;
-  repeated DatanodeLocation replicas = 8;  // List of datanodes containing replicas
+  uint64 version = 8;
+  repeated DatanodeLocation replicas = 9;  // List of datanodes containing replicas
 }
 
 // Location information for a datanode
@@ -55,6 +56,16 @@ message ReadFileResponse {
   string error_message = 2;
   bytes content = 3;
   FileMetadata metadata = 4;
+}
+
+message RenameRequest {
+  string old_path = 1;
+  string new_path = 2;
+}
+
+message RenameResponse {
+  bool success = 1;
+  string error_message = 2;
 }
 
 // Request to write/update a file
@@ -136,49 +147,101 @@ message AbortResponse {
     string error_message = 2;
 }
 
+enum LockType {
+  READ = 0;
+  WRITE = 1;
+}
+
+message LockFileRequest {
+  string path = 1;
+  LockType lock_type = 2;
+}
+
+message LockFileResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message UnlockFileRequest {
+  string path = 1;
+  LockType lock_type = 2;
+}
+
+message UnlockFileResponse {
+  bool success = 1;
+  string error_message = 2;
+}
 
 // NameNode service definition
 service NameNodeService {
     // Metadata operations
     rpc GetFileMetadata(GetFileMetadataRequest) returns (GetFileMetadataResponse) {}
-    rpc ListDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {}
+    // rpc UpdateFileMetadata(FileMetadata) returns (StatusResponse) {}
     
+    rpc LockFile(LockFileRequest) returns (LockFileResponse) {}
+    rpc UnlockFile(UnlockFileRequest) returns (UnlockFileResponse) {}
+
     // File location operations
     rpc GetFileLocations(GetFileMetadataRequest) returns (GetFileMetadataResponse) {}
     
     // Coordination operations
     rpc RegisterDataNode(DatanodeLocation) returns (RegisterResponse) {}
     rpc ReportFileStatus(FileMetadata) returns (StatusResponse) {}
-  }
-  
-  // DataNode service definition
-  service DataNodeService {
-    // Data operations
-    rpc StoreFile(FileData) returns (StatusResponse) {}
-    rpc RetrieveFile(ReadFileRequest) returns (ReadFileResponse) {}
-    rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {}
-    rpc ReplicateFile(FileData) returns (StatusResponse) {}
-    // 2PC methods
-    rpc Prepare(PrepareRequest) returns (PrepareResponse) {}
-    rpc Commit(CommitRequest) returns (CommitResponse) {}
-    rpc Abort(AbortRequest) returns (AbortResponse) {}
-  }
-  
-  // Client service definition
-  service ClientService {
+    
     // File operations
     rpc CreateFile(CreateFileRequest) returns (CreateFileResponse) {}
-    rpc ReadFile(ReadFileRequest) returns (ReadFileResponse) {}
-    rpc WriteFile(WriteFileRequest) returns (WriteFileResponse) {}
+    rpc MoveFile(ReadFileRequest) returns (ReadFileResponse) {}
     rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {}
     
     // Directory operations
     rpc ListDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {}
-    
-    // Metadata operations
-    rpc GetFileMetadata(GetFileMetadataRequest) returns (GetFileMetadataResponse) {}
+    rpc MakeDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {}
+    rpc RemoveDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {}
   }
   
+  // DataNode service definition
+  service DataNodeService {
+    // Existing methods
+    rpc StoreFile(WriteFileRequest) returns (WriteFileResponse) {}
+    rpc RetrieveFile(ReadFileRequest) returns (ReadFileResponse) {}
+    rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {}
+    
+    // New 2PC methods
+    rpc PrepareReplica(PrepareReplicaRequest) returns (PrepareReplicaResponse) {}
+    rpc CommitReplica(CommitReplicaRequest) returns (CommitReplicaResponse) {}
+    rpc AbortReplica(AbortReplicaRequest) returns (AbortReplicaResponse) {}
+
+  }
+  message PrepareReplicaRequest {
+      string txn_id = 1; 
+      string path = 2;
+      bytes content = 3;
+  }
+
+  message PrepareReplicaResponse {
+      bool success = 1;
+      string error_message = 2;
+  }
+
+  message CommitReplicaRequest {
+      string txn_id = 1;
+      string path = 2; 
+  }
+
+  message CommitReplicaResponse {
+      bool success = 1;
+      string error_message = 2;
+  }
+
+  message AbortReplicaRequest {
+      string txn_id = 1;
+      string path = 2;
+  }
+
+  message AbortReplicaResponse {
+      bool success = 1;
+      string error_message = 2;
+  }
   // Additional messages for coordination
   message RegisterResponse {
     bool success = 1;
