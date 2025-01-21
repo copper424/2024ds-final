@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // NameNodeServer implements the NameNode service
@@ -20,22 +23,22 @@ type NameNodeServer struct {
 	mutex     sync.RWMutex
 
 	// Add file locking system
-	// fileLocks map[string]*sync.RWMutex // path -> lock
+	fileLocks  *sync.RWMutex          // path -> lock
 	lockHandle map[string]*LockHandle // path -> list of lock holders
 }
 
 type LockHandle struct {
-	mu      sync.Mutex
-	writer  int8
-	readers int32
+	expiryAtN int64
+	writer    int8
+	readers   int32
 }
 
 // NewNameNodeServer creates a new NameNode server instance
 func NewNameNodeServer() *NameNodeServer {
 	return &NameNodeServer{
-		metadata:  make(map[string]*pb.FileMetadata),
-		datanodes: make(map[string]*pb.DatanodeLocation),
-		// fileLocks: make(map[string]*sync.RWMutex),
+		metadata:   make(map[string]*pb.FileMetadata),
+		datanodes:  make(map[string]*pb.DatanodeLocation),
+		fileLocks:  &sync.RWMutex{},
 		lockHandle: make(map[string]*LockHandle),
 	}
 }
@@ -80,13 +83,6 @@ func (s *NameNodeServer) CreateFile(ctx context.Context, req *pb.CreateFileReque
 	// Update metadata
 	s.metadata[path] = metadata
 
-	// Create lock handle
-	s.lockHandle[path] = &LockHandle{
-		mu:      sync.Mutex{},
-		writer:  0,
-		readers: 0,
-	}
-
 	return &pb.CreateFileResponse{
 		Success:  true,
 		Metadata: metadata,
@@ -99,12 +95,33 @@ func (s *NameNodeServer) DeleteFile(ctx context.Context, req *pb.DeleteFileReque
 	defer s.mutex.Unlock()
 
 	path := filepath.Clean(req.Path)
-	_, exists := s.metadata[path]
+	metadata, exists := s.metadata[path]
 	if !exists {
 		return &pb.DeleteFileResponse{
 			Success:      false,
 			ErrorMessage: "file not found",
 		}, nil
+	}
+	// Delete file from all DataNodes first
+	for _, replica := range metadata.Replicas {
+		// Connect to each DataNode
+		datanodeAddr := fmt.Sprintf("%s:%d", replica.Host, replica.Port)
+		conn, err := grpc.NewClient(datanodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			fmt.Printf("Warning: Failed to connect to DataNode %s: %v\n", datanodeAddr, err)
+			continue
+		}
+		defer conn.Close()
+
+		// Create DataNode client and delete file
+		datanodeClient := pb.NewDataNodeServiceClient(conn)
+		_, err = datanodeClient.DeleteFile(ctx, &pb.DeleteFileRequest{
+			Path: path,
+		})
+		if err != nil {
+			fmt.Printf("Warning: Failed to delete file on DataNode %s: %v\n", datanodeAddr, err)
+			// Continue with other replicas even if one fails
+		}
 	}
 
 	// Remove metadata
@@ -158,28 +175,39 @@ func (s *NameNodeServer) selectDataNodesForReplication(replicationFactor int) ([
 
 func (s *NameNodeServer) LockFile(ctx context.Context, req *pb.LockFileRequest) (*pb.LockFileResponse, error) {
 	path := filepath.Clean(req.Path)
+	s.fileLocks.Lock()
+	defer s.fileLocks.Unlock()
 
-	if lock, exists := s.lockHandle[path]; exists {
-		lock.mu.Lock()
-		defer lock.mu.Unlock()
-		if req.LockType == pb.LockType_WRITE {
-			if lock.writer == 1 || lock.readers > 0 {
-				return &pb.LockFileResponse{Success: false, ErrorMessage: "file already locked"}, errors.New("file already locked")
-			} else {
-				lock.writer = 1
-			}
-		} else if req.LockType == pb.LockType_READ {
-			if lock.writer == 1 {
-				return &pb.LockFileResponse{Success: false, ErrorMessage: "file already locked"}, errors.New("file already locked")
-			} else {
-				lock.readers += 1
-			}
+	lock, exists := s.lockHandle[path]
+
+	if !exists {
+		// create a lock
+		s.lockHandle[path] = &LockHandle{
+			expiryAtN: time.Now().Add(15 * time.Second).UnixNano(),
+			writer:    0,
+			readers:   0,
+		}
+		lock = s.lockHandle[path]
+	}
+
+	if req.LockType == pb.LockType_WRITE {
+		if lock.writer == 1 || lock.readers > 0 {
+			return &pb.LockFileResponse{Success: false, ErrorMessage: "file already locked"}, errors.New("file already locked")
 		} else {
-			return &pb.LockFileResponse{Success: false, ErrorMessage: "invalid lock type"}, errors.New("invalid lock type")
+			lock.writer = 1
+		}
+	} else if req.LockType == pb.LockType_READ {
+		if lock.writer == 1 {
+			return &pb.LockFileResponse{Success: false, ErrorMessage: "file already locked"}, errors.New("file already locked")
+		} else {
+			lock.readers += 1
 		}
 	} else {
-		return &pb.LockFileResponse{Success: false, ErrorMessage: "lock not found"}, errors.New("lock not found")
+		return &pb.LockFileResponse{Success: false, ErrorMessage: "invalid lock type"}, errors.New("invalid lock type")
 	}
+	// 15 seconds
+	const TIMEOUT = 15 * time.Second
+	lock.expiryAtN = time.Now().Add(TIMEOUT).UnixNano()
 
 	return &pb.LockFileResponse{Success: true}, nil
 }
@@ -187,9 +215,10 @@ func (s *NameNodeServer) LockFile(ctx context.Context, req *pb.LockFileRequest) 
 func (s *NameNodeServer) UnlockFile(ctx context.Context, req *pb.UnlockFileRequest) (*pb.UnlockFileResponse, error) {
 	path := filepath.Clean(req.Path)
 
+	s.fileLocks.Lock()
+	defer s.fileLocks.Unlock()
+
 	if lock, exists := s.lockHandle[path]; exists {
-		lock.mu.Lock()
-		defer lock.mu.Unlock()
 		if req.LockType == pb.LockType_WRITE {
 			if lock.writer == 0 {
 				return &pb.UnlockFileResponse{Success: false, ErrorMessage: "file not locked"}, errors.New("file not locked")
@@ -206,6 +235,10 @@ func (s *NameNodeServer) UnlockFile(ctx context.Context, req *pb.UnlockFileReque
 			return &pb.UnlockFileResponse{Success: false, ErrorMessage: "invalid lock type"}, errors.New("invalid lock type")
 		}
 	} else {
+		// If metadata is not found, return success
+		if s.metadata[path] == nil {
+			return &pb.UnlockFileResponse{Success: true}, nil
+		}
 		return &pb.UnlockFileResponse{Success: false, ErrorMessage: "Lock not found"}, errors.New("lock not found")
 	}
 
@@ -314,6 +347,8 @@ func (s *NameNodeServer) RegisterDataNode(ctx context.Context, location *pb.Data
 
 	// Store datanode information
 	s.datanodes[location.DatanodeId] = location
+
+	fmt.Printf("Registered DataNode: %s at %s:%d\n", location.DatanodeId, location.Host, location.Port)
 
 	return &pb.RegisterResponse{
 		Success:    true,

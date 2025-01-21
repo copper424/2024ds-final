@@ -22,6 +22,7 @@ func main() {
 		*dataDir,
 		*host,
 		int32(*port),
+		*nameNodeAddr,
 	)
 	if err != nil {
 		log.Fatalf("Failed to create datanode: %v", err)
