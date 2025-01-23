@@ -12,7 +12,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// Modify uploadFile method to include permission parameter
 func (sh *DFSShell) uploadFile(args []string) {
 	if len(args) < 3 || len(args) > 4 {
 		fmt.Println("Usage: put <local_file> <dfs_path> [permission]")
@@ -100,6 +99,15 @@ func (sh *DFSShell) uploadFile(args []string) {
 	defer conn.Close()
 
 	datanodeClient := pb.NewDataNodeServiceClient(conn)
+
+	sh.cacheMutex.Lock()
+	sh.cache[dfsPath] = &FileCache{
+		Content:             content,
+		Metadata:            newMetadata,
+		LastModifiedVersion: newMetadata.Version,
+	}
+	sh.cacheMutex.Unlock()
+
 	resp, err := datanodeClient.StoreFile(ctx, &pb.WriteFileRequest{
 		Path:    dfsPath,
 		Content: content,
@@ -112,15 +120,6 @@ func (sh *DFSShell) uploadFile(args []string) {
 		fmt.Printf("Failed to store file on DataNode %s: %s\n", datanodeAddr, resp.ErrorMessage)
 		return
 	}
-
-	// After successful upload, update cache
-	sh.cacheMutex.Lock()
-	sh.cache[dfsPath] = &FileCache{
-		Content:             content,
-		Metadata:            newMetadata,
-		LastModifiedVersion: newMetadata.Version,
-	}
-	sh.cacheMutex.Unlock()
 
 	fmt.Printf("Successfully uploaded %s to %s\n", localPath, dfsPath)
 }
@@ -198,7 +197,6 @@ func (sh *DFSShell) downloadFile(args []string) {
 	fmt.Printf("Successfully downloaded %s to %s\n", dfsPath, localPath)
 }
 
-// Add helper function for unlock operations
 func (sh *DFSShell) unlockFile(ctx context.Context, path string, lockType pb.LockType) {
 	_, err := sh.client.UnlockFile(ctx, &pb.UnlockFileRequest{
 		Path:     path,
@@ -209,7 +207,6 @@ func (sh *DFSShell) unlockFile(ctx context.Context, path string, lockType pb.Loc
 	}
 }
 
-// Helper function to fetch file from DataNode
 func (sh *DFSShell) fetchFromDataNode(ctx context.Context, dfsPath string, metadata *pb.FileMetadata) ([]byte, error) {
 	for _, datanode := range metadata.Replicas {
 		datanodeAddr := fmt.Sprintf("%s:%d", datanode.Host, datanode.Port)
