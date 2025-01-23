@@ -81,7 +81,10 @@ func (sh *DFSShell) uploadFile(args []string) {
 		Owner:    sh.owner,
 	})
 	if err != nil || !lockResp.Success {
-		fmt.Printf("Failed to lock file: %v %v\n", err, lockResp.ErrorMessage)
+		fmt.Printf("Failed to lock file: %v\n", err)
+		if lockResp != nil {
+			fmt.Printf("Failed to lock file. Return message is: %v\n", lockResp.ErrorMessage)
+		}
 		return
 	}
 	defer sh.unlockFile(ctx, dfsPath, pb.LockType_WRITE)
@@ -149,7 +152,10 @@ func (sh *DFSShell) downloadFile(args []string) {
 		Owner:    sh.owner,
 	})
 	if err != nil || !lockResp.Success {
-		fmt.Printf("Failed to lock file: %v %v\n", err, lockResp.ErrorMessage)
+		fmt.Printf("Failed to lock file: %v\n", err)
+		if lockResp != nil {
+			fmt.Printf("Failed to lock file. Return message is: %v\n", lockResp.ErrorMessage)
+		}
 		return
 	}
 	defer sh.unlockFile(ctx, dfsPath, pb.LockType_READ)
@@ -242,7 +248,10 @@ func (sh *DFSShell) deleteFile(args []string) {
 		Owner:    sh.owner,
 	})
 	if err != nil || !lockResp.Success {
-		fmt.Printf("Failed to lock file: %v %v\n", err, lockResp.ErrorMessage)
+		fmt.Printf("Failed to lock file: %v\n", err)
+		if lockResp != nil {
+			fmt.Printf("Failed to lock file. Return message is: %v\n", lockResp.ErrorMessage)
+		}
 		return
 	}
 	defer func() {
@@ -294,7 +303,10 @@ func (sh *DFSShell) catFile(args []string) {
 		Owner:    sh.owner,
 	})
 	if err != nil || !lockResp.Success {
-		fmt.Printf("Failed to lock file: %v %v\n", err, lockResp.ErrorMessage)
+		fmt.Printf("Failed to lock file: %v\n", err)
+		if lockResp != nil {
+			fmt.Printf("Failed to lock file. Return message is: %v\n", lockResp.ErrorMessage)
+		}
 		return
 	}
 	defer func() {

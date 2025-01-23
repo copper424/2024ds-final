@@ -92,6 +92,10 @@ func (sh *DFSShell) Run() {
 			sh.showFileMetadata(args)
 		case "chmod":
 			sh.changeMode(args)
+		case "lock":
+			sh.lockFile(args)
+		case "unlock":
+			sh.unlockFile2(args)
 		case "exit", "quit":
 			fmt.Println("Goodbye!")
 			return
@@ -123,6 +127,8 @@ Directory Operations:
 
 Other Commands:
     stat <path>              - Show file/directory metadata
+    lock <path> [type]       - Lock a file (type: r=read, w=write, default=write)
+    unlock <path> [type]     - Unlock a file (type: r=read, w=write, default=write)
     help                     - Show this help message
     exit, quit              - Exit the shell
 
@@ -321,4 +327,98 @@ func (sh *DFSShell) changeMode(args []string) {
 	}
 
 	fmt.Printf("Successfully changed permission of %s to %d\n", path, permission)
+}
+
+func (sh *DFSShell) lockFile(args []string) {
+	if len(args) < 2 || len(args) > 3 {
+		fmt.Println("Usage: lock <path> [type]")
+		fmt.Println("Lock types: r=read lock, w=write lock (default)")
+		return
+	}
+
+	path := sh.resolvePath(args[1])
+
+	// 默认为写锁
+	// 0 为读锁
+	// 1 为写锁
+	var lockType pb.LockType = 0
+	if len(args) == 3 {
+		switch args[2] {
+		case "r":
+			lockType = 0
+		case "w":
+			lockType = 1
+		default:
+			fmt.Println("Invalid lock type. Use 'r' for read lock or 'w' for write lock")
+			return
+		}
+	}
+
+	resp, err := sh.client.LockFile(context.Background(), &pb.LockFileRequest{
+		Path:     path,
+		Owner:    sh.owner,
+		LockType: lockType,
+	})
+
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	if !resp.Success {
+		fmt.Printf("Failed to lock file: %s\n", resp.ErrorMessage)
+		return
+	}
+
+	lockTypeStr := "write"
+	if lockType == 0 {
+		lockTypeStr = "read"
+	}
+	fmt.Printf("Successfully acquired %s lock on file: %s\n", lockTypeStr, path)
+}
+
+func (sh *DFSShell) unlockFile2(args []string) {
+	if len(args) < 2 || len(args) > 3 {
+		fmt.Println("Usage: unlock <path> [type]")
+		fmt.Println("Lock types: r=read lock, w=write lock (default)")
+		return
+	}
+
+	path := sh.resolvePath(args[1])
+
+	// 默认为写锁
+	var lockType pb.LockType = 1
+	if len(args) == 3 {
+		switch args[2] {
+		case "r":
+			lockType = 0
+		case "w":
+			lockType = 1
+		default:
+			fmt.Println("Invalid lock type. Use 'r' for read lock or 'w' for write lock")
+			return
+		}
+	}
+
+	resp, err := sh.client.UnlockFile(context.Background(), &pb.UnlockFileRequest{
+		Path:     path,
+		Owner:    sh.owner,
+		LockType: lockType,
+	})
+
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	if !resp.Success {
+		fmt.Printf("Failed to unlock file: %s\n", resp.ErrorMessage)
+		return
+	}
+
+	lockTypeStr := "write"
+	if lockType == 0 {
+		lockTypeStr = "read"
+	}
+	fmt.Printf("Successfully released %s lock on file: %s\n", lockTypeStr, path)
 }
