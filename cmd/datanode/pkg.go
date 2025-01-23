@@ -20,6 +20,7 @@ type DataNodeServer struct {
 
 	// Configuration
 	dataDir string // Directory to store files
+	logDir  string // Directory to store transaction logs
 
 	// Internal state
 	nodeID string // Unique identifier for this datanode
@@ -46,8 +47,15 @@ func NewDataNodeServer(dataDir, host string, port int32, namenode string) (*Data
 		return nil, fmt.Errorf("failed to create data directory: %v", err)
 	}
 
+	// Create log directory
+	logDir := filepath.Join(dataDir, "logs")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create log directory: %v", err)
+	}
+
 	return &DataNodeServer{
 		dataDir:     dataDir,
+		logDir:      logDir,
 		host:        host,
 		port:        port,
 		nodeID:      fmt.Sprintf("%s:%d", host, port),
@@ -300,7 +308,26 @@ func (s *DataNodeServer) PrepareReplica(ctx context.Context, req *pb.PrepareRepl
 	return &pb.PrepareReplicaResponse{Success: true}, nil
 }
 
-// CommitReplica handles the commit phase of 2PC
+// writeTransactionLog writes transaction log before actual file modification
+func (s *DataNodeServer) writeTransactionLog(txnId string, oldContent []byte, newContent []byte) error {
+	// Create log file with transaction ID
+	logPath := filepath.Join(s.logDir, fmt.Sprintf("%s.log", txnId))
+
+	// Prepare log content
+	logContent := []byte(fmt.Sprintf("%s\n\n", txnId))
+	logContent = append(logContent, oldContent...)
+	logContent = append(logContent, []byte("\n\n")...)
+	logContent = append(logContent, newContent...)
+
+	// Write log file
+	if err := os.WriteFile(logPath, logContent, 0644); err != nil {
+		return fmt.Errorf("failed to write transaction log: %v", err)
+	}
+
+	return nil
+}
+
+// CommitReplica handles the commit phase of 2PC with Write-Ahead Logging
 func (s *DataNodeServer) CommitReplica(ctx context.Context, req *pb.CommitReplicaRequest) (*pb.CommitReplicaResponse, error) {
 	s.txnLock.Lock()
 	defer s.txnLock.Unlock()
@@ -313,8 +340,29 @@ func (s *DataNodeServer) CommitReplica(ctx context.Context, req *pb.CommitReplic
 		}, nil
 	}
 
-	// Write the file
 	finalPath := s.getFilePath(txn.Path)
+
+	// Read old content if file exists
+	var oldContent []byte
+	if _, err := os.Stat(finalPath); err == nil {
+		oldContent, err = os.ReadFile(finalPath)
+		if err != nil {
+			return &pb.CommitReplicaResponse{
+				Success:      false,
+				ErrorMessage: fmt.Sprintf("failed to read existing file: %v", err),
+			}, nil
+		}
+	}
+
+	// Write transaction log first (Write-Ahead Logging)
+	if err := s.writeTransactionLog(req.TxnId, oldContent, txn.Content); err != nil {
+		return &pb.CommitReplicaResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("failed to write transaction log: %v", err),
+		}, nil
+	}
+
+	// Write the actual file
 	if err := os.WriteFile(finalPath, txn.Content, 0644); err != nil {
 		return &pb.CommitReplicaResponse{
 			Success:      false,
@@ -322,7 +370,12 @@ func (s *DataNodeServer) CommitReplica(ctx context.Context, req *pb.CommitReplic
 		}, nil
 	}
 
+	// Clean up transaction state and log
 	delete(s.pendingTxns, req.TxnId)
+	// We can optionally remove the log file here since the transaction completed successfully
+	// logPath := filepath.Join(s.logDir, fmt.Sprintf("%s.log", req.TxnId))
+	// os.Remove(logPath) // Ignore error as it's not critical
+
 	return &pb.CommitReplicaResponse{Success: true}, nil
 }
 
