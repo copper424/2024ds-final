@@ -13,7 +13,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// Add these constants at the top of the file
 const (
 	PERMISSION_PRIVATE   uint32 = 0
 	PERMISSION_READONLY  uint32 = 1
