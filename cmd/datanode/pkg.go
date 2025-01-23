@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"syscall"
 )
 
 // DataNodeServer implements the DataNode service
@@ -21,6 +22,7 @@ type DataNodeServer struct {
 	// Configuration
 	dataDir string // Directory to store files
 	logDir  string // Directory to store transaction logs
+	logFile string // Path to the transaction log file
 
 	// Internal state
 	nodeID string // Unique identifier for this datanode
@@ -53,9 +55,13 @@ func NewDataNodeServer(dataDir, host string, port int32, namenode string) (*Data
 		return nil, fmt.Errorf("failed to create log directory: %v", err)
 	}
 
+	// Set log file path
+	logFile := filepath.Join(logDir, "transactions.log")
+
 	return &DataNodeServer{
 		dataDir:     dataDir,
 		logDir:      logDir,
+		logFile:     logFile,
 		host:        host,
 		port:        port,
 		nodeID:      fmt.Sprintf("%s:%d", host, port),
@@ -308,20 +314,36 @@ func (s *DataNodeServer) PrepareReplica(ctx context.Context, req *pb.PrepareRepl
 	return &pb.PrepareReplicaResponse{Success: true}, nil
 }
 
-// writeTransactionLog writes transaction log before actual file modification
+// writeTransactionLog writes transaction log by appending to the log file
 func (s *DataNodeServer) writeTransactionLog(txnId string, oldContent []byte, newContent []byte) error {
-	// Create log file with transaction ID
-	logPath := filepath.Join(s.logDir, fmt.Sprintf("%s.log", txnId))
+	// Open file in append mode with write-only access
+	f, err := os.OpenFile(s.logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open log file: %v", err)
+	}
+	defer f.Close()
 
-	// Prepare log content
-	logContent := []byte(fmt.Sprintf("%s\n\n", txnId))
-	logContent = append(logContent, oldContent...)
-	logContent = append(logContent, []byte("\n\n")...)
-	logContent = append(logContent, newContent...)
+	// Get exclusive lock on the file
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		return fmt.Errorf("failed to lock log file: %v", err)
+	}
+	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 
-	// Write log file
-	if err := os.WriteFile(logPath, logContent, 0644); err != nil {
-		return fmt.Errorf("failed to write transaction log: %v", err)
+	// Prepare log entry
+	logEntry := []byte(fmt.Sprintf("%s\n\n", txnId))
+	logEntry = append(logEntry, oldContent...)
+	logEntry = append(logEntry, []byte("\n\n")...)
+	logEntry = append(logEntry, newContent...)
+	logEntry = append(logEntry, []byte("\n\n------------------------\n\n")...) // Separator between entries
+
+	// Append log entry
+	if _, err := f.Write(logEntry); err != nil {
+		return fmt.Errorf("failed to write to log file: %v", err)
+	}
+
+	// Ensure log is written to disk
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("failed to sync log file: %v", err)
 	}
 
 	return nil
