@@ -25,11 +25,12 @@ type FileCache struct {
 type DFSShell struct {
 	client     pb.NameNodeServiceClient
 	currentDir string
+	owner      string
 	cache      map[string]*FileCache // path -> cache entry
 	cacheMutex sync.RWMutex
 }
 
-func NewDFSShell(serverAddr string) (*DFSShell, error) {
+func NewDFSShell(serverAddr string, owner string) (*DFSShell, error) {
 	conn, err := grpc.NewClient(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect: %v", err)
@@ -38,7 +39,9 @@ func NewDFSShell(serverAddr string) (*DFSShell, error) {
 	return &DFSShell{
 		client:     pb.NewNameNodeServiceClient(conn),
 		currentDir: "/",
+		owner:      owner,
 		cache:      make(map[string]*FileCache),
+		cacheMutex: sync.RWMutex{},
 	}, nil
 }
 
@@ -73,16 +76,22 @@ func (sh *DFSShell) Run() {
 			sh.uploadFile(args)
 		case "get":
 			sh.downloadFile(args)
+		case "mv":
+			sh.moveFile(args)
 		case "rm":
 			sh.deleteFile(args)
-		// case "mkdir":
-		// 	sh.makeDirectory(args)
+		case "mkdir":
+			sh.makeDirectory(args)
+		case "rmdir":
+			sh.deleteDirectory(args)
 		case "pwd":
 			fmt.Println(sh.currentDir)
 		case "cat":
 			sh.catFile(args)
 		case "stat":
 			sh.showFileMetadata(args)
+		case "chmod":
+			sh.changeMode(args)
 		case "exit", "quit":
 			fmt.Println("Goodbye!")
 			return
@@ -94,18 +103,33 @@ func (sh *DFSShell) Run() {
 
 func (sh *DFSShell) printHelp() {
 	fmt.Println(`
-Available commands:
-    ls [path]           - List files in directory
-    cd <path>           - Change current directory
-    pwd                 - Print current directory
-    put <local> <dfs>   - Upload local file to DFS
-    get <dfs> <local>   - Download file from DFS
-    rm <path>           - Delete file or directory
-    mkdir <path>        - Create directory
-    cat <path>          - Display file contents
-    stat <path>         - Show file metadata
-    help                - Show this help
-    exit/quit           - Exit shell`)
+DFS Shell Commands:
+File Operations:
+    put <local> <dfs> [perm]  - Upload local file to DFS
+                                perm: private(0), readonly(1), readwrite(2)
+    get <dfs> <local>         - Download file from DFS
+    cat <path>                - Display file contents
+    rm <path>                 - Delete file
+    mv <src> <dest>          - Move/rename file
+    chmod <perm> <path>       - Change file permissions
+                                perm: private(0), readonly(1), readwrite(2)
+
+Directory Operations:
+    ls [path]                - List directory contents
+    cd <path>                - Change current directory
+    pwd                      - Print working directory
+    mkdir <path>             - Create directory
+    rmdir <path>             - Remove directory
+
+Other Commands:
+    stat <path>              - Show file/directory metadata
+    help                     - Show this help message
+    exit, quit              - Exit the shell
+
+Permission Levels:
+    0 (private)   - Only owner can read/write
+    1 (readonly)  - Owner can read/write, others can read
+    2 (readwrite) - Anyone can read/write`)
 }
 
 func (sh *DFSShell) listFiles(args []string) {
@@ -115,7 +139,9 @@ func (sh *DFSShell) listFiles(args []string) {
 	}
 
 	resp, err := sh.client.ListDirectory(context.Background(), &pb.ListDirectoryRequest{
-		Path: path,
+		Path:       path,
+		Owner:      sh.owner,
+		Permission: 0755,
 	})
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -144,7 +170,9 @@ func (sh *DFSShell) changeDirectory(args []string) {
 
 	// Verify directory exists
 	resp, err := sh.client.ListDirectory(context.Background(), &pb.ListDirectoryRequest{
-		Path: newPath,
+		Path:       newPath,
+		Owner:      sh.owner,
+		Permission: 0755,
 	})
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -201,4 +229,96 @@ func (sh *DFSShell) resolvePath(path string) string {
 // Helper function to format timestamps
 func formatTime(timestamp int64) string {
 	return time.Unix(0, timestamp).Format("2006-01-02 15:04:05")
+}
+
+func (sh *DFSShell) makeDirectory(args []string) {
+	if len(args) != 2 {
+		fmt.Println("Usage: mkdir <path>")
+		return
+	}
+
+	path := sh.resolvePath(args[1])
+	resp, err := sh.client.MakeDirectory(context.Background(), &pb.ListDirectoryRequest{
+		Path:       path,
+		Owner:      sh.owner,
+		Permission: 0755,
+	})
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	if !resp.Success {
+		fmt.Printf("Failed to create directory: %s\n", resp.ErrorMessage)
+		return
+	}
+
+	fmt.Printf("Directory %s created successfully\n", path)
+}
+
+func (sh *DFSShell) deleteDirectory(args []string) {
+	if len(args) != 2 {
+		fmt.Println("Usage: rmdir <path>")
+		return
+	}
+
+	path := sh.resolvePath(args[1])
+	resp, err := sh.client.RemoveDirectory(context.Background(), &pb.ListDirectoryRequest{
+		Path:       path,
+		Owner:      sh.owner,
+		Permission: 0755,
+	})
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	if !resp.Success {
+		fmt.Printf("Failed to delete directory: %s\n", resp.ErrorMessage)
+		return
+	}
+
+	fmt.Printf("Directory %s deleted successfully\n", path)
+}
+
+func (sh *DFSShell) changeMode(args []string) {
+	if len(args) != 3 {
+		fmt.Println("Usage: chmod <permission> <path>")
+		fmt.Println("Permissions: private(0), readonly(1), readwrite(2)")
+		return
+	}
+
+	// Parse permission
+	var permission uint32
+	switch args[1] {
+	case "0", "private":
+		permission = 0
+	case "1", "readonly":
+		permission = 1
+	case "2", "readwrite":
+		permission = 2
+	default:
+		fmt.Println("Invalid permission. Use: private(0), readonly(1), readwrite(2)")
+		return
+	}
+
+	path := sh.resolvePath(args[2])
+
+	resp, err := sh.client.Chmod(context.Background(), &pb.ChmodRequest{
+		Path:       path,
+		Permission: permission,
+		Owner:      sh.owner,
+	})
+
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	if !resp.Success {
+		fmt.Printf("Failed to change permission: %s\n", resp.ErrorMessage)
+		return
+	}
+
+	fmt.Printf("Successfully changed permission of %s to %d\n", path, permission)
 }

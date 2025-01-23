@@ -195,6 +195,18 @@ message HeartbeatResponse {
   string error_message = 2;
 }
 
+// Add new messages for chmod
+message ChmodRequest {
+    string path = 1;
+    uint32 permission = 2;
+    string owner = 3;  // Only owner can change permissions
+}
+
+message ChmodResponse {
+    bool success = 1;
+    string error_message = 2;
+}
+
 // NameNode service definition
 service NameNodeService {
     // Metadata operations
@@ -223,6 +235,9 @@ service NameNodeService {
 
     // Heartbeat operation
     rpc SendHeartbeat(HeartbeatRequest) returns (HeartbeatResponse) {}
+
+    // Add chmod RPC
+    rpc Chmod(ChmodRequest) returns (ChmodResponse) {}
   }
   
   // DataNode service definition

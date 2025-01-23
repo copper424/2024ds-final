@@ -5,20 +5,38 @@ import (
 	"fmt"
 	pb "my_rpc"
 	"os"
-	"time"
+
+	// "time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// Modify uploadFile method to include permission parameter
 func (sh *DFSShell) uploadFile(args []string) {
-	if len(args) != 3 {
-		fmt.Println("Usage: put <local_file> <dfs_path>")
+	if len(args) < 3 || len(args) > 4 {
+		fmt.Println("Usage: put <local_file> <dfs_path> [permission]")
+		fmt.Println("Permissions: private(0), readonly(1), readwrite(2)")
 		return
 	}
 
 	localPath := args[1]
 	dfsPath := sh.resolvePath(args[2])
+
+	// Default permission is private
+	permission := uint32(0)
+	if len(args) == 4 {
+		switch args[3] {
+		case "0", "private":
+			permission = 0
+		case "1", "readonly":
+			permission = 1
+		case "2", "readwrite":
+			permission = 2
+		default:
+			fmt.Println("Invalid permission. Using default (private)")
+		}
+	}
 
 	content, err := os.ReadFile(localPath)
 	if err != nil {
@@ -27,28 +45,8 @@ func (sh *DFSShell) uploadFile(args []string) {
 	}
 
 	ctx := context.Background()
-	// Lock the file on the NameNode
-	lockResp, err := sh.client.LockFile(ctx, &pb.LockFileRequest{
-		Path:     dfsPath,
-		LockType: pb.LockType_WRITE,
-	})
-	if err != nil || !lockResp.Success {
-		fmt.Printf("Failed to lock file: %v %v\n", err, lockResp.ErrorMessage)
-		return
-	}
 
-	defer func() {
-		// Unlock the file on the NameNode
-		_, err := sh.client.UnlockFile(ctx, &pb.UnlockFileRequest{
-			Path:     dfsPath,
-			LockType: pb.LockType_WRITE,
-		})
-		if err != nil {
-			fmt.Printf("Failed to unlock file: %v\n", err)
-		}
-	}()
-
-	// Check if the file already exists on the NameNode
+	// First check if file exists
 	metaResp, err := sh.client.GetFileMetadata(ctx, &pb.GetFileMetadataRequest{
 		Path: dfsPath,
 	})
@@ -58,25 +56,13 @@ func (sh *DFSShell) uploadFile(args []string) {
 	}
 
 	var newMetadata *pb.FileMetadata
-	if metaResp.Success {
-		// File exists, use ReportFileStatus to update metadata
-		newMetadata = metaResp.Metadata
-		newMetadata.Size = uint64(len(content))
-		newMetadata.ModificationTime = time.Now().UnixNano()
-		newMetadata.Version += 1
-
-		reportResp, err := sh.client.ReportFileStatus(ctx, newMetadata)
-		if err != nil || !reportResp.Success {
-			fmt.Printf("Failed to report file status: %v\n", err)
-			return
-		}
-	} else {
-		// File does not exist, create a new file
+	if !metaResp.Success {
+		// File doesn't exist, create new file
 		createResp, err := sh.client.CreateFile(ctx, &pb.CreateFileRequest{
 			Path:              dfsPath,
 			ReplicationFactor: 3,
-			Permission:        0644,
-			Owner:             "copper424",
+			Permission:        permission,
+			Owner:             sh.owner,
 			Size:              uint64(len(content)),
 		})
 		if err != nil || !createResp.Success {
@@ -84,7 +70,21 @@ func (sh *DFSShell) uploadFile(args []string) {
 			return
 		}
 		newMetadata = createResp.Metadata
+	} else {
+		newMetadata = metaResp.Metadata
 	}
+
+	// Now lock the file
+	lockResp, err := sh.client.LockFile(ctx, &pb.LockFileRequest{
+		Path:     dfsPath,
+		LockType: pb.LockType_WRITE,
+		Owner:    sh.owner,
+	})
+	if err != nil || !lockResp.Success {
+		fmt.Printf("Failed to lock file: %v %v\n", err, lockResp.ErrorMessage)
+		return
+	}
+	defer sh.unlockFile(ctx, dfsPath, pb.LockType_WRITE)
 
 	// Store the file to primar DataNode replica
 	primary_datanode := newMetadata.Replicas[0]
@@ -133,14 +133,26 @@ func (sh *DFSShell) downloadFile(args []string) {
 
 	ctx := context.Background()
 
-	// Check metadata first
+	// First check metadata and permissions
 	metaResp, err := sh.client.GetFileMetadata(ctx, &pb.GetFileMetadataRequest{
 		Path: dfsPath,
 	})
-	if err != nil {
+	if err != nil || !metaResp.Success {
 		fmt.Printf("Failed to get file metadata: %v\n", err)
 		return
 	}
+
+	// After confirming file exists, try to lock
+	lockResp, err := sh.client.LockFile(ctx, &pb.LockFileRequest{
+		Path:     dfsPath,
+		LockType: pb.LockType_READ,
+		Owner:    sh.owner,
+	})
+	if err != nil || !lockResp.Success {
+		fmt.Printf("Failed to lock file: %v %v\n", err, lockResp.ErrorMessage)
+		return
+	}
+	defer sh.unlockFile(ctx, dfsPath, pb.LockType_READ)
 
 	// Check cache
 	sh.cacheMutex.RLock()
@@ -154,26 +166,6 @@ func (sh *DFSShell) downloadFile(args []string) {
 		fmt.Println("Using cached version of file")
 	} else {
 		// Cache miss or file modified - fetch from DataNode
-		// Step 1: LockFile on NameNode
-		lockResp, err := sh.client.LockFile(ctx, &pb.LockFileRequest{
-			Path:     dfsPath,
-			LockType: pb.LockType_READ,
-		})
-		if err != nil || !lockResp.Success {
-			fmt.Printf("Failed to lock file: %v %v\n", err, lockResp.ErrorMessage)
-			return
-		}
-		defer func() {
-			_, err := sh.client.UnlockFile(ctx, &pb.UnlockFileRequest{
-				Path:     dfsPath,
-				LockType: pb.LockType_READ,
-			})
-			if err != nil {
-				fmt.Printf("Failed to unlock file: %v\n", err)
-			}
-		}()
-
-		// Fetch from DataNode
 		content, err = sh.fetchFromDataNode(ctx, dfsPath, metaResp.Metadata)
 		if err != nil {
 			fmt.Printf("Failed to fetch file: %v\n", err)
@@ -198,6 +190,17 @@ func (sh *DFSShell) downloadFile(args []string) {
 	}
 
 	fmt.Printf("Successfully downloaded %s to %s\n", dfsPath, localPath)
+}
+
+// Add helper function for unlock operations
+func (sh *DFSShell) unlockFile(ctx context.Context, path string, lockType pb.LockType) {
+	_, err := sh.client.UnlockFile(ctx, &pb.UnlockFileRequest{
+		Path:     path,
+		LockType: lockType,
+	})
+	if err != nil {
+		fmt.Printf("Failed to unlock file: %v\n", err)
+	}
 }
 
 // Helper function to fetch file from DataNode
@@ -236,6 +239,7 @@ func (sh *DFSShell) deleteFile(args []string) {
 	lockResp, err := sh.client.LockFile(ctx, &pb.LockFileRequest{
 		Path:     dfsPath,
 		LockType: pb.LockType_WRITE,
+		Owner:    sh.owner,
 	})
 	if err != nil || !lockResp.Success {
 		fmt.Printf("Failed to lock file: %v %v\n", err, lockResp.ErrorMessage)
@@ -287,6 +291,7 @@ func (sh *DFSShell) catFile(args []string) {
 	lockResp, err := sh.client.LockFile(ctx, &pb.LockFileRequest{
 		Path:     dfsPath,
 		LockType: pb.LockType_READ,
+		Owner:    sh.owner,
 	})
 	if err != nil || !lockResp.Success {
 		fmt.Printf("Failed to lock file: %v %v\n", err, lockResp.ErrorMessage)

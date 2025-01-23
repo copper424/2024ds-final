@@ -219,7 +219,7 @@ func (s *DataNodeServer) DeleteFile(ctx context.Context, req *pb.DeleteFileReque
 }
 
 // StartDataNode starts the DataNode service and registers with the NameNode
-func (s *DataNodeServer) StartDataNode(namenodeAddr string) error {
+func (s *DataNodeServer) StartDataNode(namenodeAddr string, heartbeat_interval time.Duration) error {
 	// Connect to the NameNode
 	conn, err := grpc.NewClient(namenodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -249,16 +249,16 @@ func (s *DataNodeServer) StartDataNode(namenodeAddr string) error {
 	s.nodeID = resp.DatanodeId
 
 	// Start heartbeat goroutine
-	go s.startHeartbeat(namenodeAddr)
+	go s.startHeartbeat(namenodeAddr, heartbeat_interval)
 
 	return nil
 }
 
 // startHeartbeat periodically sends heartbeat to NameNode
-func (s *DataNodeServer) startHeartbeat(namenodeAddr string) {
-	ticker := time.NewTicker(10 * time.Second)
+func (s *DataNodeServer) startHeartbeat(namenodeAddr string, heartbeat_interval time.Duration) {
+	ticker := time.NewTicker(heartbeat_interval)
 	for range ticker.C {
-		conn, err := grpc.Dial(namenodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err := grpc.NewClient(namenodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			fmt.Printf("Failed to connect to NameNode for heartbeat: %v\n", err)
 			continue

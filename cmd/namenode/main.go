@@ -14,10 +14,11 @@ import (
 func main() {
 	restoreFile := flag.String("restoreFile", "", "Path to local metadata backup for restore")
 	backupFile := flag.String("backupFile", "", "Path to local metadata backup for periodic saving")
+	heartbeat_timeout := flag.Int("heartbeat_timeout", 10, "Heartbeat timeout in seconds")
 	secondary_namenode := flag.String("secondary_namenode", "", "Address of the secondary namenode")
 	flag.Parse()
 
-	namenode := NewNameNodeServer()
+	namenode := NewNameNodeServer(time.Duration(*heartbeat_timeout) * time.Second)
 
 	if *restoreFile != "" {
 		namenode.RestoreMetadata(*restoreFile)

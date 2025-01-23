@@ -6,6 +6,7 @@ import (
 	"log"
 	pb "my_rpc"
 	"net"
+	"time"
 
 	"google.golang.org/grpc"
 )
@@ -14,6 +15,7 @@ func main() {
 	dataDir := flag.String("dataDir", "./datadir1", "Directory to store data files")
 	host := flag.String("host", "localhost", "Host address")
 	port := flag.Int("port", 20251, "Port number")
+	heartbeat_interval := flag.Int("heartbeat_interval", 8, "Heartbeat interval in seconds")
 	nameNodeAddr := flag.String("namenode", "localhost:20241", "Address of the NameNode")
 
 	flag.Parse()
@@ -29,7 +31,7 @@ func main() {
 	}
 
 	// Register with NameNode
-	if err := datanode.StartDataNode(*nameNodeAddr); err != nil {
+	if err := datanode.StartDataNode(*nameNodeAddr, time.Duration((*heartbeat_interval)*int(time.Second))); err != nil {
 		log.Fatalf("Failed to start datanode: %v", err)
 	}
 

@@ -13,6 +13,13 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// Add these constants at the top of the file
+const (
+	PERMISSION_PRIVATE   uint32 = 0
+	PERMISSION_READONLY  uint32 = 1
+	PERMISSION_READWRITE uint32 = 2
+)
+
 // NameNodeServer implements the NameNode service
 type NameNodeServer struct {
 	pb.UnimplementedNameNodeServiceServer // Required for forward compatibility with gRPC
@@ -27,8 +34,9 @@ type NameNodeServer struct {
 	lockHandle map[string]*LockHandle // path -> list of lock holders
 
 	// Add heartbeat tracking
-	heartbeats     map[string]int64 // datanode_id -> last heartbeat timestamp
-	heartbeatMutex sync.RWMutex
+	heartbeats         map[string]int64 // datanode_id -> last heartbeat timestamp
+	heartbeatMutex     sync.RWMutex
+	heartbeats_timeout time.Duration
 }
 
 type LockHandle struct {
@@ -38,13 +46,14 @@ type LockHandle struct {
 }
 
 // NewNameNodeServer creates a new NameNode server instance
-func NewNameNodeServer() *NameNodeServer {
+func NewNameNodeServer(heartbeats_timeout time.Duration) *NameNodeServer {
 	namnode_server := &NameNodeServer{
-		metadata:   make(map[string]*pb.FileMetadata),
-		datanodes:  make(map[string]*pb.DatanodeLocation),
-		fileLocks:  &sync.RWMutex{},
-		lockHandle: make(map[string]*LockHandle),
-		heartbeats: make(map[string]int64),
+		metadata:           make(map[string]*pb.FileMetadata),
+		datanodes:          make(map[string]*pb.DatanodeLocation),
+		fileLocks:          &sync.RWMutex{},
+		lockHandle:         make(map[string]*LockHandle),
+		heartbeats:         make(map[string]int64),
+		heartbeats_timeout: heartbeats_timeout,
 	}
 	namnode_server.MakeDirectory(context.Background(), &pb.ListDirectoryRequest{Path: "/", Permission: 0777, Owner: "root"})
 
@@ -54,27 +63,22 @@ func NewNameNodeServer() *NameNodeServer {
 	return namnode_server
 }
 
-// Helper function to check permissions
-func (s *NameNodeServer) checkPermissions(path string, owner string, requiredPermission uint32) error {
-	metadata, exists := s.metadata[path]
-	if !exists {
-		return errors.New("file not found")
-	}
-	if metadata.GetOwner() != owner && owner != "root" {
-		return errors.New("not the owner")
-	}
-	if metadata.Permission&requiredPermission == 0 {
-		return errors.New("insufficient permissions")
-	}
-	return nil
-}
-
 // CreateFile implements the ClientService CreateFile RPC method
 func (s *NameNodeServer) CreateFile(ctx context.Context, req *pb.CreateFileRequest) (*pb.CreateFileResponse, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	path := filepath.Clean(req.Path)
+
+	// Validate permission type
+	if req.Permission != PERMISSION_PRIVATE &&
+		req.Permission != PERMISSION_READONLY &&
+		req.Permission != PERMISSION_READWRITE {
+		return &pb.CreateFileResponse{
+			Success:      false,
+			ErrorMessage: "invalid permission type",
+		}, nil
+	}
 
 	// Check if file already exists
 	if _, exists := s.metadata[path]; exists {
@@ -202,6 +206,36 @@ func (s *NameNodeServer) selectDataNodesForReplication(replicationFactor int) ([
 func (s *NameNodeServer) LockFile(ctx context.Context, req *pb.LockFileRequest) (*pb.LockFileResponse, error) {
 	path := filepath.Clean(req.Path)
 
+	// First check if file exists and get metadata
+	s.mutex.RLock()
+	metadata, exists := s.metadata[path]
+	s.mutex.RUnlock()
+
+	if !exists {
+		return &pb.LockFileResponse{
+			Success:      false,
+			ErrorMessage: "file not found",
+		}, nil
+	}
+
+	// Check permissions based on lock type and file permission
+	if req.LockType == pb.LockType_WRITE {
+		if metadata.Owner != req.Owner && metadata.Permission != PERMISSION_READWRITE {
+			return &pb.LockFileResponse{
+				Success:      false,
+				ErrorMessage: "insufficient permissions for write operation",
+			}, nil
+		}
+	} else if req.LockType == pb.LockType_READ {
+		if metadata.Permission == PERMISSION_PRIVATE && metadata.Owner != req.Owner {
+			return &pb.LockFileResponse{
+				Success:      false,
+				ErrorMessage: "insufficient permissions for read operation",
+			}, nil
+		}
+	}
+
+	// If checks pass, proceed with locking
 	s.fileLocks.Lock()
 	defer s.fileLocks.Unlock()
 
@@ -421,47 +455,50 @@ func (s *NameNodeServer) ReportFileStatus(ctx context.Context, metadata *pb.File
 	}, nil
 }
 
-// SendHeartbeat handles heartbeat messages from DataNodes
-func (s *NameNodeServer) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	s.heartbeatMutex.Lock()
-	s.heartbeats[req.DatanodeId] = req.Timestamp
-	s.heartbeatMutex.Unlock()
-
-	return &pb.HeartbeatResponse{Success: true}, nil
-}
-
-// checkHeartbeats periodically checks for dead DataNodes
-func (s *NameNodeServer) checkHeartbeats() {
-	const heartbeatTimeout = 10 * time.Second
-	ticker := time.NewTicker(5 * time.Second)
-
-	for range ticker.C {
-		now := time.Now().UnixNano()
-		deadNodes := []string{}
-
-		s.heartbeatMutex.RLock()
-		for nodeID, lastBeat := range s.heartbeats {
-			if now-lastBeat > int64(heartbeatTimeout) {
-				deadNodes = append(deadNodes, nodeID)
-			}
-		}
-		s.heartbeatMutex.RUnlock()
-
-		if len(deadNodes) > 0 {
-			s.mutex.Lock()
-			for _, nodeID := range deadNodes {
-				delete(s.datanodes, nodeID)
-				s.heartbeatMutex.Lock()
-				delete(s.heartbeats, nodeID)
-				s.heartbeatMutex.Unlock()
-				fmt.Printf("DataNode %s marked as dead\n", nodeID)
-			}
-			s.mutex.Unlock()
-		}
-	}
-}
-
 // Helper function to generate a unique datanode ID
 func generateDatanodeID(host string, port int32) string {
 	return fmt.Sprintf("%s:%d", host, port)
+}
+
+// Add Chmod implementation
+func (s *NameNodeServer) Chmod(ctx context.Context, req *pb.ChmodRequest) (*pb.ChmodResponse, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	path := filepath.Clean(req.Path)
+
+	// Check if file exists
+	metadata, exists := s.metadata[path]
+	if !exists {
+		return &pb.ChmodResponse{
+			Success:      false,
+			ErrorMessage: "file not found",
+		}, nil
+	}
+
+	// Only owner or root can change permissions
+	if metadata.Owner != req.Owner && req.Owner != "root" {
+		return &pb.ChmodResponse{
+			Success:      false,
+			ErrorMessage: "permission denied: not the owner",
+		}, nil
+	}
+
+	// Validate permission value
+	if req.Permission != PERMISSION_PRIVATE &&
+		req.Permission != PERMISSION_READONLY &&
+		req.Permission != PERMISSION_READWRITE {
+		return &pb.ChmodResponse{
+			Success:      false,
+			ErrorMessage: "invalid permission value",
+		}, nil
+	}
+
+	// Update permission
+	metadata.Permission = req.Permission
+	metadata.ModificationTime = time.Now().UnixNano()
+
+	return &pb.ChmodResponse{
+		Success: true,
+	}, nil
 }
