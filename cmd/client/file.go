@@ -357,7 +357,7 @@ func (sh *DFSShell) catFile(args []string) {
 		return
 	}
 
-	fmt.Print(string(content))
+	fmt.Println(string(content))
 }
 
 func (sh *DFSShell) moveFile(args []string) {
