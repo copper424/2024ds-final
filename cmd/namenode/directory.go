@@ -58,7 +58,7 @@ func (s *NameNodeServer) MakeDirectory(ctx context.Context, req *pb.ListDirector
 		Path:             path,
 		Size:             0,
 		Permission:       0755, // Default directory permissions
-		Owner:            "copper424",
+		Owner:            req.GetOwner(),
 		CreationTime:     time.Now().UnixNano(),
 		ModificationTime: time.Now().UnixNano(),
 	}
@@ -87,12 +87,13 @@ func (s *NameNodeServer) RemoveDirectory(ctx context.Context, req *pb.ListDirect
 
 	// Check if directory is empty
 	for filePath := range s.metadata {
-		if filepath.Dir(filePath) == path {
-			return &pb.ListDirectoryResponse{
-				Success:      false,
-				ErrorMessage: "directory not empty",
-			}, nil
-		}
+		// if filepath.Dir(filePath) == path {
+		// 	return &pb.ListDirectoryResponse{
+		// 		Success:      false,
+		// 		ErrorMessage: "directory not empty",
+		// 	}, nil
+		// }
+		s.DeleteFile(ctx, &pb.DeleteFileRequest{Path: filePath})
 	}
 
 	// Remove directory metadata

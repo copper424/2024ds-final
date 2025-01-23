@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -247,7 +248,33 @@ func (s *DataNodeServer) StartDataNode(namenodeAddr string) error {
 	// Store the assigned ID
 	s.nodeID = resp.DatanodeId
 
+	// Start heartbeat goroutine
+	go s.startHeartbeat(namenodeAddr)
+
 	return nil
+}
+
+// startHeartbeat periodically sends heartbeat to NameNode
+func (s *DataNodeServer) startHeartbeat(namenodeAddr string) {
+	ticker := time.NewTicker(10 * time.Second)
+	for range ticker.C {
+		conn, err := grpc.Dial(namenodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			fmt.Printf("Failed to connect to NameNode for heartbeat: %v\n", err)
+			continue
+		}
+
+		client := pb.NewNameNodeServiceClient(conn)
+		_, err = client.SendHeartbeat(context.Background(), &pb.HeartbeatRequest{
+			DatanodeId: s.nodeID,
+			Timestamp:  time.Now().UnixNano(),
+		})
+
+		conn.Close()
+		if err != nil {
+			fmt.Printf("Failed to send heartbeat: %v\n", err)
+		}
+	}
 }
 
 // PrepareReplica handles the prepare phase of 2PC

@@ -37,7 +37,6 @@ message CreateFileRequest {
   int32 replication_factor = 3;  // Number of replicas to maintain
   uint64 size = 4;
   string owner = 5;
-  // bytes content = 4;
 }
 
 // Response for file creation
@@ -50,6 +49,7 @@ message CreateFileResponse {
 // Request to read a file
 message ReadFileRequest {
   string path = 1;
+  string owner = 2;
 }
 
 // Response for file reading
@@ -63,6 +63,7 @@ message ReadFileResponse {
 message RenameRequest {
   string old_path = 1;
   string new_path = 2;
+  string owner = 3;
 }
 
 message RenameResponse {
@@ -74,6 +75,7 @@ message RenameResponse {
 message WriteFileRequest {
   string path = 1;
   bytes content = 2;
+  string owner = 3;
 }
 
 // Response for file writing
@@ -86,6 +88,7 @@ message WriteFileResponse {
 // Request to delete a file
 message DeleteFileRequest {
   string path = 1;
+  string owner = 2;
 }
 
 // Response for file deletion
@@ -97,6 +100,8 @@ message DeleteFileResponse {
 // Request to list directory contents
 message ListDirectoryRequest {
   string path = 1;
+  string owner = 2;
+  int32 permission = 3;
 }
 
 // Response for directory listing
@@ -109,6 +114,7 @@ message ListDirectoryResponse {
 // Request to get file metadata
 message GetFileMetadataRequest {
   string path = 1;
+  string owner = 2;
 }
 
 // Response for file metadata
@@ -122,6 +128,7 @@ message PrepareRequest {
     string transaction_id = 1;
     string path = 2;
     bytes content = 3;
+    string owner = 4;
 }
 
 message PrepareResponse {
@@ -132,6 +139,7 @@ message PrepareResponse {
 message CommitRequest {
     string transaction_id = 1;
     string path = 2;
+    string owner = 3;
 }
 
 message CommitResponse {
@@ -142,6 +150,7 @@ message CommitResponse {
 message AbortRequest {
     string transaction_id = 1;
     string path = 2;
+    string owner = 3;
 }
 
 message AbortResponse {
@@ -157,6 +166,7 @@ enum LockType {
 message LockFileRequest {
   string path = 1;
   LockType lock_type = 2;
+  string owner = 3;
 }
 
 message LockFileResponse {
@@ -167,9 +177,20 @@ message LockFileResponse {
 message UnlockFileRequest {
   string path = 1;
   LockType lock_type = 2;
+  string owner = 3;
 }
 
 message UnlockFileResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message HeartbeatRequest {
+  string datanode_id = 1;
+  int64 timestamp = 2;
+}
+
+message HeartbeatResponse {
   bool success = 1;
   string error_message = 2;
 }
@@ -199,6 +220,9 @@ service NameNodeService {
     rpc ListDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {}
     rpc MakeDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {}
     rpc RemoveDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {}
+
+    // Heartbeat operation
+    rpc SendHeartbeat(HeartbeatRequest) returns (HeartbeatResponse) {}
   }
   
   // DataNode service definition
@@ -218,6 +242,7 @@ service NameNodeService {
       string txn_id = 1; 
       string path = 2;
       bytes content = 3;
+      string owner = 4;
   }
 
   message PrepareReplicaResponse {
@@ -228,6 +253,7 @@ service NameNodeService {
   message CommitReplicaRequest {
       string txn_id = 1;
       string path = 2; 
+      string owner = 3;
   }
 
   message CommitReplicaResponse {
@@ -238,6 +264,7 @@ service NameNodeService {
   message AbortReplicaRequest {
       string txn_id = 1;
       string path = 2;
+      string owner = 3;
   }
 
   message AbortReplicaResponse {

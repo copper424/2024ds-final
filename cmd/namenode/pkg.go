@@ -25,6 +25,10 @@ type NameNodeServer struct {
 	// Add file locking system
 	fileLocks  *sync.RWMutex          // path -> lock
 	lockHandle map[string]*LockHandle // path -> list of lock holders
+
+	// Add heartbeat tracking
+	heartbeats     map[string]int64 // datanode_id -> last heartbeat timestamp
+	heartbeatMutex sync.RWMutex
 }
 
 type LockHandle struct {
@@ -35,12 +39,34 @@ type LockHandle struct {
 
 // NewNameNodeServer creates a new NameNode server instance
 func NewNameNodeServer() *NameNodeServer {
-	return &NameNodeServer{
+	namnode_server := &NameNodeServer{
 		metadata:   make(map[string]*pb.FileMetadata),
 		datanodes:  make(map[string]*pb.DatanodeLocation),
 		fileLocks:  &sync.RWMutex{},
 		lockHandle: make(map[string]*LockHandle),
+		heartbeats: make(map[string]int64),
 	}
+	namnode_server.MakeDirectory(context.Background(), &pb.ListDirectoryRequest{Path: "/", Permission: 0777, Owner: "root"})
+
+	// Start heartbeat checker
+	go namnode_server.checkHeartbeats()
+
+	return namnode_server
+}
+
+// Helper function to check permissions
+func (s *NameNodeServer) checkPermissions(path string, owner string, requiredPermission uint32) error {
+	metadata, exists := s.metadata[path]
+	if !exists {
+		return errors.New("file not found")
+	}
+	if metadata.GetOwner() != owner && owner != "root" {
+		return errors.New("not the owner")
+	}
+	if metadata.Permission&requiredPermission == 0 {
+		return errors.New("insufficient permissions")
+	}
+	return nil
 }
 
 // CreateFile implements the ClientService CreateFile RPC method
@@ -175,6 +201,7 @@ func (s *NameNodeServer) selectDataNodesForReplication(replicationFactor int) ([
 
 func (s *NameNodeServer) LockFile(ctx context.Context, req *pb.LockFileRequest) (*pb.LockFileResponse, error) {
 	path := filepath.Clean(req.Path)
+
 	s.fileLocks.Lock()
 	defer s.fileLocks.Unlock()
 
@@ -348,6 +375,11 @@ func (s *NameNodeServer) RegisterDataNode(ctx context.Context, location *pb.Data
 	// Store datanode information
 	s.datanodes[location.DatanodeId] = location
 
+	// Initialize heartbeat tracking
+	s.heartbeatMutex.Lock()
+	s.heartbeats[location.DatanodeId] = time.Now().UnixNano()
+	s.heartbeatMutex.Unlock()
+
 	fmt.Printf("Registered DataNode: %s at %s:%d\n", location.DatanodeId, location.Host, location.Port)
 
 	return &pb.RegisterResponse{
@@ -387,6 +419,46 @@ func (s *NameNodeServer) ReportFileStatus(ctx context.Context, metadata *pb.File
 	return &pb.StatusResponse{
 		Success: true,
 	}, nil
+}
+
+// SendHeartbeat handles heartbeat messages from DataNodes
+func (s *NameNodeServer) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
+	s.heartbeatMutex.Lock()
+	s.heartbeats[req.DatanodeId] = req.Timestamp
+	s.heartbeatMutex.Unlock()
+
+	return &pb.HeartbeatResponse{Success: true}, nil
+}
+
+// checkHeartbeats periodically checks for dead DataNodes
+func (s *NameNodeServer) checkHeartbeats() {
+	const heartbeatTimeout = 10 * time.Second
+	ticker := time.NewTicker(5 * time.Second)
+
+	for range ticker.C {
+		now := time.Now().UnixNano()
+		deadNodes := []string{}
+
+		s.heartbeatMutex.RLock()
+		for nodeID, lastBeat := range s.heartbeats {
+			if now-lastBeat > int64(heartbeatTimeout) {
+				deadNodes = append(deadNodes, nodeID)
+			}
+		}
+		s.heartbeatMutex.RUnlock()
+
+		if len(deadNodes) > 0 {
+			s.mutex.Lock()
+			for _, nodeID := range deadNodes {
+				delete(s.datanodes, nodeID)
+				s.heartbeatMutex.Lock()
+				delete(s.heartbeats, nodeID)
+				s.heartbeatMutex.Unlock()
+				fmt.Printf("DataNode %s marked as dead\n", nodeID)
+			}
+			s.mutex.Unlock()
+		}
+	}
 }
 
 // Helper function to generate a unique datanode ID

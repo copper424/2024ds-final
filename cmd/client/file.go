@@ -33,7 +33,7 @@ func (sh *DFSShell) uploadFile(args []string) {
 		LockType: pb.LockType_WRITE,
 	})
 	if err != nil || !lockResp.Success {
-		fmt.Printf("Failed to lock file: %v\n", err)
+		fmt.Printf("Failed to lock file: %v %v\n", err, lockResp.ErrorMessage)
 		return
 	}
 
@@ -160,7 +160,7 @@ func (sh *DFSShell) downloadFile(args []string) {
 			LockType: pb.LockType_READ,
 		})
 		if err != nil || !lockResp.Success {
-			fmt.Printf("Failed to lock file: %v\n", err)
+			fmt.Printf("Failed to lock file: %v %v\n", err, lockResp.ErrorMessage)
 			return
 		}
 		defer func() {
@@ -238,7 +238,7 @@ func (sh *DFSShell) deleteFile(args []string) {
 		LockType: pb.LockType_WRITE,
 	})
 	if err != nil || !lockResp.Success {
-		fmt.Printf("Failed to lock file: %v\n", err)
+		fmt.Printf("Failed to lock file: %v %v\n", err, lockResp.ErrorMessage)
 		return
 	}
 	defer func() {
@@ -289,7 +289,7 @@ func (sh *DFSShell) catFile(args []string) {
 		LockType: pb.LockType_READ,
 	})
 	if err != nil || !lockResp.Success {
-		fmt.Printf("Failed to lock file: %v\n", err)
+		fmt.Printf("Failed to lock file: %v %v\n", err, lockResp.ErrorMessage)
 		return
 	}
 	defer func() {

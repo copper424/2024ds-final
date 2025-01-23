@@ -31,6 +31,7 @@ const (
 	NameNodeService_ListDirectory_FullMethodName    = "/my_rpc.NameNodeService/ListDirectory"
 	NameNodeService_MakeDirectory_FullMethodName    = "/my_rpc.NameNodeService/MakeDirectory"
 	NameNodeService_RemoveDirectory_FullMethodName  = "/my_rpc.NameNodeService/RemoveDirectory"
+	NameNodeService_SendHeartbeat_FullMethodName    = "/my_rpc.NameNodeService/SendHeartbeat"
 )
 
 // NameNodeServiceClient is the client API for NameNodeService service.
@@ -56,6 +57,8 @@ type NameNodeServiceClient interface {
 	ListDirectory(ctx context.Context, in *ListDirectoryRequest, opts ...grpc.CallOption) (*ListDirectoryResponse, error)
 	MakeDirectory(ctx context.Context, in *ListDirectoryRequest, opts ...grpc.CallOption) (*ListDirectoryResponse, error)
 	RemoveDirectory(ctx context.Context, in *ListDirectoryRequest, opts ...grpc.CallOption) (*ListDirectoryResponse, error)
+	// Heartbeat operation
+	SendHeartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
 }
 
 type nameNodeServiceClient struct {
@@ -186,6 +189,16 @@ func (c *nameNodeServiceClient) RemoveDirectory(ctx context.Context, in *ListDir
 	return out, nil
 }
 
+func (c *nameNodeServiceClient) SendHeartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HeartbeatResponse)
+	err := c.cc.Invoke(ctx, NameNodeService_SendHeartbeat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NameNodeServiceServer is the server API for NameNodeService service.
 // All implementations must embed UnimplementedNameNodeServiceServer
 // for forward compatibility.
@@ -209,6 +222,8 @@ type NameNodeServiceServer interface {
 	ListDirectory(context.Context, *ListDirectoryRequest) (*ListDirectoryResponse, error)
 	MakeDirectory(context.Context, *ListDirectoryRequest) (*ListDirectoryResponse, error)
 	RemoveDirectory(context.Context, *ListDirectoryRequest) (*ListDirectoryResponse, error)
+	// Heartbeat operation
+	SendHeartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
 	mustEmbedUnimplementedNameNodeServiceServer()
 }
 
@@ -254,6 +269,9 @@ func (UnimplementedNameNodeServiceServer) MakeDirectory(context.Context, *ListDi
 }
 func (UnimplementedNameNodeServiceServer) RemoveDirectory(context.Context, *ListDirectoryRequest) (*ListDirectoryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveDirectory not implemented")
+}
+func (UnimplementedNameNodeServiceServer) SendHeartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendHeartbeat not implemented")
 }
 func (UnimplementedNameNodeServiceServer) mustEmbedUnimplementedNameNodeServiceServer() {}
 func (UnimplementedNameNodeServiceServer) testEmbeddedByValue()                         {}
@@ -492,6 +510,24 @@ func _NameNodeService_RemoveDirectory_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NameNodeService_SendHeartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HeartbeatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NameNodeServiceServer).SendHeartbeat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NameNodeService_SendHeartbeat_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NameNodeServiceServer).SendHeartbeat(ctx, req.(*HeartbeatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // NameNodeService_ServiceDesc is the grpc.ServiceDesc for NameNodeService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -546,6 +582,10 @@ var NameNodeService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveDirectory",
 			Handler:    _NameNodeService_RemoveDirectory_Handler,
+		},
+		{
+			MethodName: "SendHeartbeat",
+			Handler:    _NameNodeService_SendHeartbeat_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
